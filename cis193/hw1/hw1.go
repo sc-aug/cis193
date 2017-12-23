@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// Feel free to use the main function for testing your functions
-	fmt.Println("Hello, Ø¯Ù†ÙŠØ§!")
+	fmt.Println("Hello, دنيا!")
 }
 
 // ParsePhone parses a string of numbers into the format (123) 456-7890.

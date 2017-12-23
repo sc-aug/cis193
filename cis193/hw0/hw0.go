@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// Feel free to use the main function for testing your functions
-	fmt.Println("Hello, à¤¦à¥à¤¨à¤¿à¤¯à¤¾!")
+	fmt.Println("Hello, दुनिया!")
 }
 
 // Fizzbuzz is a classic introductory programming problem.

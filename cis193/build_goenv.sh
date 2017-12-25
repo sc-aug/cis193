@@ -7,10 +7,11 @@ CHN="os"
 #docker container rm $CN
 
 #LV="$(dirname $(pwd))"
-LV="$(pwd)"
-CV="/root/repo/"
+LV="$(pwd)"        # local folder
+CV="/root/repo/"   # container folder
+P="4000"           # expose port
 
 docker run -it \
-    -v $LV:$CV \
+    -v $LV:$CV -p $P:$P \
     --name $CN -h $CHN \
     $IM "/bin/bash"

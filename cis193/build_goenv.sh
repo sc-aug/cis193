@@ -9,9 +9,11 @@ CHN="os"
 #LV="$(dirname $(pwd))"
 LV="$(pwd)"        # local folder
 CV="/root/repo/"   # container folder
-P="4000"           # expose port
+
+P1="3000"           # expose port
+P2="4000"           # expose port
 
 docker run -it \
-    -v $LV:$CV -p $P:$P \
+    -v $LV:$CV -p $P1:$P1 -p $P2:$P2 \
     --name $CN -h $CHN \
     $IM "/bin/bash"

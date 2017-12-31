@@ -4,6 +4,9 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+	"unicode"
+	"flag"
 )
 
 // Problem 1: CLI
@@ -40,10 +43,15 @@ import (
 // Feel free to do this section directly in the main() function.
 
 func main() {
-	for i := 0; i < 10; i += 3 {
-		fmt.Printf("%d\n", i)
+  s := flag.Int("start", 0, "an int")
+	e := flag.Int("end", 0, "an int")
+	p := flag.Int("step", 0, "an int")
+	flag.Parse()
+	for i:= *s; (*e-i) * *p > 0; i += *p {
+		fmt.Println(i)
 	}
 }
+
 
 // GetEmails takes in string input and returns a string slice of the
 // emails found in the input string.
@@ -57,8 +65,9 @@ func main() {
 //
 // You can assume that all email addresses will be surrounded by whitespace.
 func GetEmails(s string) []string {
-	// TODO
-	return nil
+	reg := regexp.MustCompile(`[A-Za-z0-9._+-]+@[A-Za-z.]+.(com|net|edu|org)`)
+	emails := reg.FindAllString(s, -1)
+	return emails
 }
 
 // GetPhoneNumbers takes in string input and returns a string slice of the
@@ -77,6 +86,26 @@ func GetEmails(s string) []string {
 //
 // You can assume that all phone numbers will be surrounded by whitespace.
 func GetPhoneNumbers(s string) []string {
-	// TODO
-	return nil
+	reg := regexp.MustCompile(`[\\(\\)0-9\s.+-]{10,}`)
+	numstr := reg.FindAllString(s, -1)
+	nums := make([]string, len(numstr))
+	for i, ns := range numstr {
+		nums[i] = ParsePhone(ns)
+	}
+	return nums
+}
+
+// from hw1
+func ParsePhone(phone string) string {
+	var num = make([]rune, 10)
+	var cnt = 0
+	for _, n := range phone {
+		if cnt >= 10 {
+			break
+		}
+		if unicode.IsDigit(n) {
+			num[cnt], cnt = n, cnt+1
+		}
+	}
+	return string(num)
 }

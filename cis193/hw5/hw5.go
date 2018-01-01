@@ -21,8 +21,17 @@ func main() {
 // Filter copies values from the input channel into an output channel that match the filter function p
 // The function p determines whether an int from the input channel c is sent on the output channel
 func Filter(c <-chan int, p func(int) bool) <-chan int {
-	// TODO
-	return nil
+	buffCh := make(chan int, 9)
+	go func() {
+		for i := range c {
+			if p(i) {
+				buffCh <- i
+			}
+		}
+		close(buffCh)
+	}()
+
+	return buffCh
 }
 
 // Result is a type representing a single result with its index from a slice
@@ -46,7 +55,10 @@ type Result struct {
 // execute, and all results should be sent on the output channel. Once all tasks
 // have been completed, close the channel.
 func ConcurrentRetry(tasks []func() (string, error), concurrent int, retry int) <-chan Result {
-	// TODO
+	type Task struct {
+		index int
+		task func() (string, error)
+	}
 	return nil
 }
 

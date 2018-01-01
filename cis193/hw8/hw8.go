@@ -3,10 +3,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"regexp"
 	"unicode"
-	"flag"
 )
 
 // Problem 1: CLI
@@ -43,15 +43,14 @@ import (
 // Feel free to do this section directly in the main() function.
 
 func main() {
-  s := flag.Int("start", 0, "an int")
+	s := flag.Int("start", 0, "an int")
 	e := flag.Int("end", 0, "an int")
 	p := flag.Int("step", 0, "an int")
 	flag.Parse()
-	for i:= *s; (*e-i) * *p > 0; i += *p {
+	for i := *s; (*e-i)**p > 0; i += *p {
 		fmt.Println(i)
 	}
 }
-
 
 // GetEmails takes in string input and returns a string slice of the
 // emails found in the input string.

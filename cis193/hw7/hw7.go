@@ -5,6 +5,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -43,8 +46,37 @@ type NewsSlice []*News
 // If n is greater than the number of total posts available (which should be 30), return data from
 // the all of the available posts (all thirty).
 func ScrapeHackerNews(n int) NewsSlice {
-	// TODO
-	return nil
+	site := "https://news.ycombinator.com/"
+	doc, err := goquery.NewDocument(site)
+	if err != nil {
+		log.Fatal(err)
+	}
+	titles := doc.Find("a.storylink")
+	infos := doc.Find("td.subtext")
+
+	if n > titles.Length() {
+		n = titles.Length()
+	}
+	nslice := make(NewsSlice, n)
+
+	for i := 0; i < n; i++ {
+		tt := titles.Eq(i).Text()
+		url, _ := titles.Eq(i).Attr("href") // _ type of bool
+		item := infos.Eq(i)
+		p := item.Find("span.score").First().Text()
+		re := regexp.MustCompile("[0-9]+")
+		ps, err := strconv.Atoi(re.FindAllString(p, 1)[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		user := item.Find("a.hnuser").First().Text()
+		ns := &News{ps, tt, user, url}
+		fmt.Println(ns)
+
+		nslice[i] = ns
+	}
+
+	return nslice
 }
 
 // GetEmails returns a string slice of the emails found on the given URL.
@@ -56,8 +88,27 @@ func ScrapeHackerNews(n int) NewsSlice {
 // having to investigate where and how emails are located on the webpage.
 // Note: you should have 47 total emails returned.
 func GetEmails() []string {
-	// TODO
-	return nil
+	emails := []string{}
+	site := "http://www.cis.upenn.edu/about-people/"
+	html, err := goquery.NewDocument(site)
+	if err != nil {
+		log.Fatal(err)
+	}
+	anchors := html.Find("tbody tr a")
+	fmt.Println(anchors.Length())
+	for i := 0; i < anchors.Length(); i ++ {
+		href, ok := anchors.Eq(i).Attr("href")
+		// if strings.HasPrefix(href, "mailto:") {
+		if ok {
+			emailRegex := regexp.MustCompile(`^mailto:[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+`)
+			email := emailRegex.FindString(href)
+			if email != "" {
+				emails = append(emails, strings.TrimPrefix(email, "mailto:"))
+			}
+		}
+	}
+
+	return emails
 }
 
 // CountryData has GDP information on a country

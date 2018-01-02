@@ -5,4 +5,3 @@ Materials:
 
 Solution Ref:
 * https://github.com/prehistoric-penguin/cis-193
-* https://github.com/ladrift/upenn-cis-193

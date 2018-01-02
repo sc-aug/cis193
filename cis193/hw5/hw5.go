@@ -2,7 +2,12 @@
 // Due March 3, 2017 at 11:59pm
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+	"sync"
+	"errors"
+)
 
 func main() {
 	// Feel free to use the main function for testing your functions
@@ -55,11 +60,56 @@ type Result struct {
 // execute, and all results should be sent on the output channel. Once all tasks
 // have been completed, close the channel.
 func ConcurrentRetry(tasks []func() (string, error), concurrent int, retry int) <-chan Result {
-	type Task struct {
-		index int
+	type taskInfo struct {
+		idx  int
 		task func() (string, error)
 	}
-	return nil
+	// result channel (return)
+	res := make(chan Result)
+	// channel for tasks
+	taskList := make(chan taskInfo, len(tasks))
+	// task waiting group
+	var taskWG sync.WaitGroup
+
+	gopherWork := func(i int, recTaskCh <-chan taskInfo) {
+		for t := range recTaskCh {
+			defer taskWG.Done()
+			log.Printf("START\ttask#%d worker: gopher#%d\n", t.idx, i)
+
+			for j := 0; j < retry; j++ {
+				s, err := t.task()
+				if err == nil {
+					res <- Result{t.idx, s}
+					log.Printf("END  \ttask#%d worker: gopher#%d\n", t.idx, i)
+					break
+				}
+			}
+		}
+		log.Printf("GOHOME\tgopher#%v\n", i)
+	}
+
+	// we will have concurrent number of gophers work for us
+	go func() {
+		for i := 0; i < concurrent; i++ {
+			go gopherWork(i, taskList)
+		}
+	}()
+
+	// push tasks to channel
+	for i, t := range tasks {
+		log.Printf("Add  \ttask#%d\n", i)
+		taskWG.Add(1)
+		taskList <- taskInfo{i, t}
+	}
+	close(taskList)
+
+	// wait ... close channel ...
+	go func() {
+		taskWG.Wait() // blocks here until WaitGroup counter is 0
+		close(res)
+	}()
+
+	return res
 }
 
 // Task is an interface for types that process integers
@@ -74,7 +124,6 @@ type Task interface {
 // Do not leave any pending goroutines. Make sure all goroutines are cleaned up
 // properly and any synchronizing mechanisms closed.
 func Fastest(input int, tasks ...Task) (int, error) {
-	// TODO
 	return 0, nil
 }
 
@@ -86,6 +135,5 @@ func Fastest(input int, tasks ...Task) (int, error) {
 // Do not leave any pending goroutines. Make sure all goroutines are cleaned up
 // properly and any synchronizing mechanisms closed.
 func MapReduce(input int, reduce func(results []int) int, tasks ...Task) (int, error) {
-	// TODO
 	return 0, nil
 }

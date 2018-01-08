@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	// "sync"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -143,9 +142,72 @@ type CountryData struct {
 // Feel free to make and use helper functions for this function. To help with testing this
 // function, we know from intelligence reports that the GDP for "Canada" is 1532343 and
 // the GDP for "Colombia" is 274135.
-func getInfo(site string) (CountryData, string, string) {
+func GetCountryGDP(country string) (int, error) {
+	seed := []string{"https://www.cis.upenn.edu/~cis193/scraping/a9e9a6f21b65f8560fb1a19b0bc45c77.html"}
+	workList := make(chan []string, 10)
+	go func() { workList <- seed }()
+
+	seen := make(map[string]bool)
+	save := make(map[string]string)
+	crawl(workList, seen, save)
+
+	if data, ok := save[country]; !ok {
+		return 0, errors.New("Cannot find the country data.")
+	} else {
+		out, _ := strconv.Atoi(strings.Replace(data, ",", "", -1))
+		return out, nil
+	}
+}
+
+// control the number of goroutines
+var tokens = make(chan struct{}, 20)
+
+func crawl(wList chan []string, seen map[string]bool, save map[string]string) {
+	for cnt := 1; cnt > 0; cnt-- {
+		list := <-wList
+		for _, url := range list {
+			if !seen[url] {
+				seen[url] = true
+				info := getInfo(url)
+				save[info.Country] = info.GDP
+				cnt++
+				go func(u string) {
+					tokens <- struct{}{}
+					wList <- getLinks(u)
+					<-tokens
+				}(url)
+			}
+		}
+	}
+}
+
+func getLinks(u string) []string {
+	if u == "" {
+		return nil
+	}
+	doc, err := goquery.NewDocument(u)
+	if err != nil {
+		log.Fatalf("%v %v\n", err, u)
+	}
+	tmp := doc.Find("ul li a")
+	u1, _ := tmp.Eq(0).Attr("href")
+	u2, _ := tmp.Eq(1).Attr("href")
+
+	if u1 == "" && u2 == "" {
+		return nil
+	}
+	if u1 == "" {
+		return []string{u2}
+	}
+	if u2 == "" {
+		return []string{u1}
+	}
+	return []string{u1, u2}
+}
+
+func getInfo(site string) CountryData {
 	if site == "" {
-		return CountryData{"", ""}, "", ""
+		return CountryData{"", ""}
 	}
 	doc, err := goquery.NewDocument(site)
 	if err != nil {
@@ -153,83 +215,5 @@ func getInfo(site string) (CountryData, string, string) {
 	}
 	n := doc.Find("h3.country").Text()
 	gdp := doc.Find("h3.gdp").Text()
-	tmp := doc.Find("ul li a")
-	u1, ok1 := tmp.Eq(0).Attr("href")
-	u2, ok2 := tmp.Eq(1).Attr("href")
-	if !ok1 {
-		u1 = ""
-	}
-	if !ok2 {
-		u2 = ""
-	}
-	return CountryData{n, gdp}, u1, u2
-}
-
-
-func GetCountryGDP(country string) (int, error) {
-	seed := "https://www.cis.upenn.edu/~cis193/scraping/a9e9a6f21b65f8560fb1a19b0bc45c77.html"
-	siteCh := make(chan string, 5)
-	buffer := make(chan CountryData, 5)
-	siteCh <- seed
-
-	found := make(chan struct{})
-	done := make(chan struct{})
-
-	stopFind := func() bool {
-		select {
-		case <- found:
-			return true
-		default:
-			return false
-		}
-	}
-
-	var res int
-
-	go func() {
-		for s := range siteCh {
-			if stopFind() {
-				break
-			}
-			fmt.Println("url:", s)
-			cd, u1, u2 := getInfo(s)
-			buffer <- cd
-			if u1 != "" {
-				go func() { siteCh <- u1 }()
-			}
-			if u2 != "" {
-				go func() { siteCh <- u2 }()
-			}
-		}
-		close(siteCh)
-	}()
-
-	for i := 0; i < 4; i ++ {
-		go func() {
-			for cd := range buffer {
-				if stopFind() {
-					break
-				}
-				if cd.Country == country {
-					res, _ = strconv.Atoi(strings.Replace(cd.GDP, ",", "", -1))
-					close(found)
-					break
-				}
-			}
-		}()
-	}
-
-	// drain channel
-	go func() {
-		for !stopFind() {}
-		for range buffer {}
-		close(done)
-	}()
-
-	<- done
-	if res != 0 {
-		return res, nil
-	} else {
-		return 0, errors.New("Country not found.")
-	}
+	return CountryData{n, gdp}
 }

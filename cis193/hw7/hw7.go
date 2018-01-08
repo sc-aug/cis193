@@ -3,11 +3,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
 	"strconv"
 	"strings"
+	// "sync"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -96,7 +98,7 @@ func GetEmails() []string {
 	}
 	anchors := html.Find("tbody tr a")
 	fmt.Println(anchors.Length())
-	for i := 0; i < anchors.Length(); i ++ {
+	for i := 0; i < anchors.Length(); i++ {
 		href, ok := anchors.Eq(i).Attr("href")
 		// if strings.HasPrefix(href, "mailto:") {
 		if ok {
@@ -141,7 +143,93 @@ type CountryData struct {
 // Feel free to make and use helper functions for this function. To help with testing this
 // function, we know from intelligence reports that the GDP for "Canada" is 1532343 and
 // the GDP for "Colombia" is 274135.
+func getInfo(site string) (CountryData, string, string) {
+	if site == "" {
+		return CountryData{"", ""}, "", ""
+	}
+	doc, err := goquery.NewDocument(site)
+	if err != nil {
+		log.Fatalf("%v %v\n", err, site)
+	}
+	n := doc.Find("h3.country").Text()
+	gdp := doc.Find("h3.gdp").Text()
+	tmp := doc.Find("ul li a")
+	u1, ok1 := tmp.Eq(0).Attr("href")
+	u2, ok2 := tmp.Eq(1).Attr("href")
+	if !ok1 {
+		u1 = ""
+	}
+	if !ok2 {
+		u2 = ""
+	}
+	return CountryData{n, gdp}, u1, u2
+}
+
+
 func GetCountryGDP(country string) (int, error) {
-	// TODO
-	return 0, nil
+	seed := "https://www.cis.upenn.edu/~cis193/scraping/a9e9a6f21b65f8560fb1a19b0bc45c77.html"
+	siteCh := make(chan string, 5)
+	buffer := make(chan CountryData, 5)
+	siteCh <- seed
+
+	found := make(chan struct{})
+	done := make(chan struct{})
+
+	stopFind := func() bool {
+		select {
+		case <- found:
+			return true
+		default:
+			return false
+		}
+	}
+
+	var res int
+
+	go func() {
+		for s := range siteCh {
+			if stopFind() {
+				break
+			}
+			fmt.Println("url:", s)
+			cd, u1, u2 := getInfo(s)
+			buffer <- cd
+			if u1 != "" {
+				go func() { siteCh <- u1 }()
+			}
+			if u2 != "" {
+				go func() { siteCh <- u2 }()
+			}
+		}
+		close(siteCh)
+	}()
+
+	for i := 0; i < 4; i ++ {
+		go func() {
+			for cd := range buffer {
+				if stopFind() {
+					break
+				}
+				if cd.Country == country {
+					res, _ = strconv.Atoi(strings.Replace(cd.GDP, ",", "", -1))
+					close(found)
+					break
+				}
+			}
+		}()
+	}
+
+	// drain channel
+	go func() {
+		for !stopFind() {}
+		for range buffer {}
+		close(done)
+	}()
+
+	<- done
+	if res != 0 {
+		return res, nil
+	} else {
+		return 0, errors.New("Country not found.")
+	}
 }

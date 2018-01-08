@@ -3,10 +3,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sync"
-	"errors"
 )
 
 func main() {
@@ -124,7 +124,59 @@ type Task interface {
 // Do not leave any pending goroutines. Make sure all goroutines are cleaned up
 // properly and any synchronizing mechanisms closed.
 func Fastest(input int, tasks ...Task) (int, error) {
-	return 0, nil
+	type taskResult struct {
+		o int
+		e error
+	}
+
+	if len(tasks) == 0 {
+		return 0, errors.New("No input task.")
+	}
+
+	abort := make(chan struct{})
+	done := make(chan struct{})
+	res := make(chan taskResult)
+
+	// for interrupt operations
+	switcher := func() bool {
+		select {
+		case <-abort:
+			return true
+		default:
+			return false
+		}
+	}
+
+	for _, t := range tasks {
+		go func(tk Task) {
+			if switcher() {
+				return
+			}
+			out, err := tk.Execute(input)
+			if !switcher() {
+				res <- taskResult{out, err}
+				close(abort)
+			}
+		}(t)
+	}
+
+	go func() {
+		for !switcher() {
+		}
+		close(res) // make sure that channel are closed
+	}()
+
+	var first taskResult
+	go func() {
+		first = <-res
+		for r := range res {
+			fmt.Println(r)
+		}
+		close(done)
+	}()
+
+	<-done
+	return first.o, first.e
 }
 
 // MapReduce takes any number of tasks, and feeds their results through reduce
@@ -135,5 +187,95 @@ func Fastest(input int, tasks ...Task) (int, error) {
 // Do not leave any pending goroutines. Make sure all goroutines are cleaned up
 // properly and any synchronizing mechanisms closed.
 func MapReduce(input int, reduce func(results []int) int, tasks ...Task) (int, error) {
-	return 0, nil
+	// 1. tasks => taskCh (chan Task)
+	// 2. Limited number of gophers work on tasks
+	//   - output => output channel
+	// 3. goroutine pull data from output channel
+	//   - get a slice of output
+	// 4. feed reduce func with the slice
+	// * if any error occured, abort & clean goroutines
+	//   - taskCh = drain
+	//   - outCh = close & drain
+	type taskResult struct {
+		o int
+		e error
+	}
+	// for abort
+	abort := make(chan struct{})
+
+	abortSwicher := func() bool {
+		select {
+		case <-abort:
+			return true
+		default:
+			return false
+		}
+	}
+
+	// step 1
+	taskCh := make(chan Task)
+	go func() {
+		for _, t := range tasks {
+			taskCh <- t
+		}
+		close(taskCh)
+	}()
+	// step 2
+	// in order to close channel(outCh), use WaitGroup
+	var wg sync.WaitGroup
+	workerNum := 4
+	outCh := make(chan taskResult)
+	errCh := make(chan taskResult, 10) // blocked without a buffer
+	for i := 0; i < workerNum; i++ {
+		go func() {
+			for t := range taskCh {
+				if abortSwicher() {
+					return
+				}
+				wg.Add(1)
+				o, e := t.Execute(input)
+				if e != nil && !abortSwicher() {
+					errCh <- taskResult{o, e}
+					close(abort)
+				} else {
+					outCh <- taskResult{o, e}
+				}
+				wg.Done()
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(outCh)
+		close(errCh)
+	}()
+
+	// step 3
+	res := []int{}
+	done := make(chan struct{})
+	go func() {
+		for o := range outCh {
+			if abortSwicher() {
+				for range outCh {
+				} // drain outCh
+				for range taskCh {
+				} // drain taskCh
+				break
+			}
+			res = append(res, o.o)
+		}
+		close(done)
+	}()
+	// step 4
+	<-done
+
+	if abortSwicher() {
+		o := <-errCh
+		for range errCh {
+		} // drain errCh
+		return o.o, o.e
+	} else {
+		return reduce(res), nil
+	}
 }
